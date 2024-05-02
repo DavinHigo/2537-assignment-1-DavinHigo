@@ -21,7 +21,7 @@ const port = process.env.PORT || 3000;
 const app = express();
 
 
-app.use(express.static(__dirname + "/images")) 
+app.use(express.static(__dirname + "/public")) 
 
 
 var {database} = include('databaseConnection');
@@ -48,17 +48,144 @@ app.use(session({
 }
 ));
 
+// Home Page
 app.get('/', (req, res) => {
-    if (req.session.pageHits) { 
-        req.session.pageHits++; 
+    if (req.session.user) {
+        // User is logged in
+        res.send(`Hello, ${req.session.user.name}!<br><a href="/members">Members Area</a> | <a href="/logout">Logout</a>`);
+    } else {
+        // User is not logged in
+        res.send(`
+            <form action="/signup" method="GET">
+                <button type="submit">Sign Up</button>
+            </form>
+            <form action="/login" method="GET">
+                <button type="submit">Log In</button>
+            </form>
+        `);
     }
-    else {
-        req.session.pageHits = 1; 
-    }
-    res.send("<h1>Hello World! " + req.session.pageHits + "</h1>"); 
 });
 
 
+// Handle signup form submission
+app.get('/signup', (req, res) => {
+    res.send(`
+        <p>Sign Up</p>
+        <form action="/signupsubmit" method="POST">
+            Name: <input type="text" name="name"><br>
+            Email: <input type="email" name="email"><br>
+            Password: <input type="password" name="password"><br>
+            <button type="submit">Sign Up</button>
+        </form>
+    `);
+});
+
+// Handle login form submission
+app.get('/login', (req, res) => {
+    res.send(`
+        <p>Log In</p>
+        <form action="/loginsubmit" method="POST">
+            Email: <input type="email" name="email"><br>
+            Password: <input type="password" name="password"><br>
+            <button type="submit">Log In</button>
+        </form>
+    `);
+});
+
+
+// Handle signup form submission
+app.post('/signupsubmit', (req, res) => {
+    const { name, email, password } = req.body;
+    const errors = [];
+
+    // Check for missing fields
+    if (!name) {
+        errors.push('Name is required');
+    }
+    if (!email) {
+        errors.push('Email is required');
+    }
+    if (!password) {
+        errors.push('Password is required');
+    }
+
+    // If there are errors, render the signup form with error messages and retry link
+    if (errors.length > 0) {
+        return res.send(`
+            <p style="color: red;">${errors.join(', ')}</p>
+            <a href="/signup">Try again</a> <!-- Link to refresh the page -->
+        `);
+    }
+
+    // Assuming you have a User model and database interaction
+    const user = { name, email, password };
+    req.session.user = user; // Store user in session
+
+    res.redirect('/');
+});
+
+
+// Handle login form submission
+app.post('/loginsubmit', (req, res) => {
+    const { email, password } = req.body;
+    const errors = [];
+
+    // Check for missing fields
+    if (!email || !password) {
+        errors.push('Email/Password is invalid');
+    }
+
+    // If there are errors, render the login form with error messages and retry link
+    if (errors.length > 0) {
+        return res.send(`
+            <p style="color: red;">${errors.join(', ')}</p>
+            <a href="/login">Try again</a> <!-- Link to refresh the page -->
+        `);
+    }
+
+    // Implement authentication logic (e.g., check against database)
+    // Assuming authentication is successful
+    const user = { name: 'Fernandez', email };
+    req.session.user = user; // Store user in session
+
+    res.redirect('/');
+});
+
+
+
+
+
+
+
+
+// Members Area
+app.get('/members', (req, res) => {
+    if (req.session.user) {
+        // Display members area if user is logged in
+        res.send('Members Area');
+    } else {
+        // Redirect to login if user is not logged in
+        res.redirect('/login');
+    }
+});
+
+// Logout
+app.get('/logout', (req, res) => {
+    // Destroy session and redirect to home page
+    req.session.destroy((err) => {
+        if (err) {
+            return res.send('Error logging out');
+        }
+        res.redirect('/');
+    });
+});
+
+
+//Bottom (404, Port)
+app.get("*", (req,res) => {
+    res.status(404);
+    res.send("Page not found - 404");
+})
 
 app.listen(port, () => {
     console.log(`Server is running on port ${port}`);

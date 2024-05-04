@@ -1,8 +1,12 @@
+require("./utils.js");
+
 const express = require('express');
 const session = require('express-session');
 const MongoStore = require('connect-mongo');
-
+const path = require('path');
 const { MongoClient } = require('mongodb');
+const Joi = require('joi');
+const bcrypt = require('bcrypt');
 
 const app = express();
 
@@ -38,7 +42,7 @@ async function connectToMongo() {
     }));
 
     app.use(express.urlencoded({extended: false}));
-    app.use(express.static(__dirname + "/public")) 
+app.use(express.static(path.join(__dirname, 'public')));
 
     // Example usage: Protecting a route with session authentication
 app.get('/', (req, res) => {
@@ -53,28 +57,39 @@ app.get('/', (req, res) => {
   } else {
     // User is not logged in
     res.send(`
-      <h1>Welcome to My App!</h1>
-      <p>Choose an action:</p>
       <button onclick="window.location='/signup'">Sign Up</button>
       <button onclick="window.location='/login'">Login</button>
     `);
   }
 });
 
+function getRandomInt(max) {
+  return Math.floor(Math.random() * max);
+}
 
-    // Route for rendering the members area (requires authentication)
-    app.get('/members', (req, res) => {
-      if (req.session && req.session.user) {
-        const { username } = req.session.user;
-        res.send(`
-            <h1>Hello, ${username}.</h1>
+//members area 
+   app.get('/members', (req, res) => {
+  if (req.session && req.session.user) {
+    let num = getRandomInt(3);
+    let img;
+    if (num == 0) {
+      img = '/1.jpg'; 
+    } else if (num == 1) {
+      img = '/2.jpg';
+    } else {
+      img = '/3.jpg'; 
+    }
 
-            <button onclick="window.location='/logout'">Logout</button>
-        `);
-      } else {
-        res.status(401).send('Unauthorized. Please log in to access this page.');
-      }
-    });
+    const { username } = req.session.user;
+    res.send(`
+      <h1>Hello, ${username}.</h1>
+      <img src="${img}" alt="Random Image" style="max-width: 500px; max-height: 500px; width: auto; height: auto;">
+      <br><button onclick="window.location='/logout'">Logout</button>
+    `);
+  } else {
+    res.status(401).send('Unauthorized. Please log in to access this page.');
+  }
+});
 
     // Route for logging out (clear session and redirect to home page)
     app.get('/logout', (req, res) => {
@@ -86,57 +101,100 @@ app.get('/', (req, res) => {
       });
     });
 
-    // Route for rendering signup form
-    app.get('/signup', (req, res) => {
-      res.send(`
-        <h1>Sign Up</h1>
-        <form action="/signup" method="POST">
-          <input type="text" name="username" placeholder="Username" required><br>
-          <input type="email" name="email" placeholder="Email" required><br>
-          <input type="password" name="password" placeholder="Password" required><br>
-          <button type="submit">Sign Up</button>
-        </form>
-      `);
-    });
+// Route for rendering signup form
+app.get('/signup', (req, res) => {
+  res.send(`
+    <h1>Sign Up</h1>
+    <form action="/signup" method="POST">
+      <input type="text" name="username" placeholder="Username"><br>
+      <input type="email" name="email" placeholder="Email"><br>
+      <input type="password" name="password" placeholder="Password"><br>
+      <button type="submit">Sign Up</button>
+    </form>
+  `);
+});
 
-    // Route for processing signup form submission
-    app.post('/signup', async (req, res) => {
-      const { username, email, password } = req.body;
-      const usersCollection = client.db().collection('users');
-      try {
-        await usersCollection.insertOne({ username, email, password });
-        res.send('User registered successfully!');
-      } catch (err) {
-        console.error("Error registering user:", err);
-        res.status(500).send('Failed to register user');
-      }
-    });
+// Route for processing signup form submission
+app.post('/signup', async (req, res) => {
+  const { username, email, password } = req.body;
+
+  // Validate input using Joi
+  const schema = Joi.object({
+    username: Joi.string().alphanum().min(3).max(30).required(),
+    email: Joi.string().email().required(),
+    password: Joi.string().min(6).required()
+  });
+
+  try {
+    await schema.validateAsync({ username, email, password });
+  } catch (error) {
+    return res.status(400).send(`Validation error: ${error.details[0].message}`);
+  }
+
+  // Hash the password using bcrypt
+  const hashedPassword = await bcrypt.hash(password, 10); // Use salt rounds of 10
+
+  const usersCollection = client.db().collection('users');
+  try {
+    await usersCollection.insertOne({ username, email, password: hashedPassword });
+    req.session.user = { username, email }; // Store user in session
+    res.redirect('/members'); // Redirect to members area
+  } catch (err) {
+    console.error("Error registering user:", err);
+    res.status(500).send('Failed to register user');
+  }
+});
+
+
 
     // Route for rendering login form
     app.get('/login', (req, res) => {
       res.send(`
         <h1>Login</h1>
         <form action="/login" method="POST">
-          <input type="text" name="username" placeholder="Username" required>
-          <input type="password" name="password" placeholder="Password" required>
+          <input type="text" name="username" placeholder="Username">
+          <input type="password" name="password" placeholder="Password">
           <button type="submit">Login</button>
         </form>
       `);
     });
 
-    // Route for processing login form submission
-    app.post('/login', async (req, res) => {
-      const { username, password } = req.body;
-      const usersCollection = client.db().collection('users');
-      const user = await usersCollection.findOne({ username, password });
+// Route for processing login form submission
+app.post('/login', async (req, res) => {
+  const { email, password } = req.body;
 
-      if (user) {
-        req.session.user = user; // Store user in session
-        res.send('Login successful!');
-      } else {
-        res.status(401).send('Invalid username or password');
-      }
-    });
+  // Validate input using Joi
+  const schema = Joi.object({
+    email: Joi.string().email().required(),
+    password: Joi.string().required()
+  });
+
+  try {
+    await schema.validateAsync({ email, password });
+  } catch (error) {
+    return res.status(400).send(`Validation error: ${error.details[0].message}`);
+  }
+
+  const usersCollection = client.db().collection('users');
+  const user = await usersCollection.findOne({ email });
+
+  if (user) {
+    // Compare hashed password with provided password using bcrypt
+    const passwordMatch = await bcrypt.compare(password, user.password);
+
+    if (passwordMatch) {
+      req.session.user = { username: user.username }; // Store username in session
+      return res.redirect('/members'); // Redirect to members area
+    }
+  }
+
+  // If login fails, send an error message and link back to login page
+  res.status(401).send('Invalid email or password. <br><a href="/login">Try again</a>');
+});
+
+
+
+
 
     // Route for handling 404 Not Found
     app.get('*', (req, res) => {

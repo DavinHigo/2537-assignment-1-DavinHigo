@@ -171,7 +171,7 @@ async function connectToMongo() {
             try {
                 await schema.validateAsync({ email, password });
             } catch (error) {
-                return res.status(400).send(`Validation error: ${error.details[0].message}`);
+                return res.status(401).send('Invalid email/password. <br><a href="/login">Try again</a>');
             }
 
             const usersCollection = client.db().collection('users');

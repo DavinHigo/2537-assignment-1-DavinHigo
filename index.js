@@ -130,7 +130,7 @@ async function connectToMongo() {
             try {
                 await schema.validateAsync({ username, email, password });
             } catch (error) {
-                return res.status(401).send('All fields must be filled. <br><a href="/login">Try again</a>');
+                return res.status(401).send('All fields must be filled. <br><a href="/signup">Try again</a>');
             }
 
             // Hash the password using bcrypt

@@ -130,7 +130,7 @@ async function connectToMongo() {
             try {
                 await schema.validateAsync({ username, email, password });
             } catch (error) {
-                return res.status(400).send(`Validation error: ${error.details[0].message}`);
+                return res.status(401).send('Invalid email/password. <br><a href="/login">Try again</a>');
             }
 
             // Hash the password using bcrypt
@@ -179,7 +179,7 @@ async function connectToMongo() {
 
             if (!user) {
                 console.log('User not found');
-                return res.status(401).send('Invalid email or password. <br><a href="/login">Try again</a>');
+                return res.status(401).send('Invalid email/password. <br><a href="/login">Try again</a>');
             }
 
             // Compare hashed password with provided password using bcrypt
@@ -187,7 +187,7 @@ async function connectToMongo() {
 
             if (!passwordMatch) {
                 console.log('Incorrect password');
-                return res.status(401).send('Invalid email or password. <br><a href="/login">Try again</a>');
+                return res.status(401).send('Invalid email/password. <br><a href="/login">Try again</a>');
             }
 
             // If login is successful, store user in session and redirect
